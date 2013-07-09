@@ -6,7 +6,7 @@ import "sort"
 import "crypto/hmac"
 import "hash"
 import "encoding/base64"
-import "http"
+import "net/http"
 import "strings"
 
 type OAuthRequest struct {
