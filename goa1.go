@@ -22,6 +22,7 @@ type OAuthRequest struct {
   Version	    string
   Signature	    string
   Callback          string
+  Verifier          string
   Parameters	    map[string][]string
 }
 
@@ -87,6 +88,8 @@ func appendParam(req *OAuthRequest, k string, value []string, add bool) {
       req.Nonce = value[0]
     case "oauth_callback":
       req.Callback = value[0]
+    case "oauth_verifier":
+      req.Verifier = value[0]
     case "oauth_signature_method":
       req.SignatureMethod = value[0]
     case "oauth_token":
@@ -159,6 +162,7 @@ func Validate(req *OAuthRequest, clientsecret, tokensecret string) (bool, error)
   params["oauth_token"] = []string{req.Token}
   params["oauth_version"] = []string{req.Version}
   params["oauth_callback"] = []string{req.Callback}
+  params["oauth_verifier"] = []string{req.Verifier}
 
   for k, v := range req.Parameters {
     params[k] = v
