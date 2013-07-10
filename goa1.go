@@ -25,6 +25,12 @@ type OAuthRequest struct {
   Parameters	    map[string][]string
 }
 
+type OAuthRequestTokenReply struct {
+  Token string
+  TokenSecret string
+  CallbackConfirmed bool
+}
+
 func ParseRequest(r *http.Request) (*OAuthRequest, error) {
   urladd := "http://"+r.Host+r.URL.String()
   idxq := strings.Index(urladd, "?")
@@ -109,20 +115,7 @@ func (arr StringSlice) Swap(i, j int) {
   arr[j] = v
 }
 
-func Validate(req *OAuthRequest, clientsecret, tokensecret string) (bool, error) {
-  params := make(map[string][]string)
-  params["oauth_consumer_key"] = []string{req.ConsumerKey}
-  params["oauth_nonce"] = []string{req.Nonce}
-  params["oauth_signature_method"] = []string{req.SignatureMethod}
-  params["oauth_timestamp"] = []string{req.Timestamp}
-//  params["oauth_token"] = []string{req.Token}
-  params["oauth_version"] = []string{req.Version}
-  params["oauth_callback"] = []string{req.Callback}
-
-  for k, v := range req.Parameters {
-    params[k] = v
-  }
-
+func PrepareQuery(params map[string][]string, encode bool) string {
   total := len(params)
   ordered := make(StringSlice, 0, total)
   for k, _ := range params {
@@ -135,14 +128,43 @@ func Validate(req *OAuthRequest, clientsecret, tokensecret string) (bool, error)
   for i := 0; i < total; i++ {
     vs := params[ordered[i]]
     for j := 0; j < len(vs); j++ {
-      if len(parQry) > 0 {
-        parQry = fmt.Sprintf("%s%%26%s%%3D%s", parQry, escape(ordered[i]), escape(vs[j]))
-      } else {
-        parQry = fmt.Sprintf("&%s%%3D%s", escape(ordered[i]), escape(vs[j]))
+      ik := escape(ordered[i])
+      ij := escape(vs[j])
+      if len(ij) > 0 {
+        if len(parQry) > 0 {
+          if encode {
+            parQry = fmt.Sprintf("%s%%26%s%%3D%s", parQry, ik, ij)
+          } else {
+            parQry = fmt.Sprintf("%s&%s=%s", parQry, ik, ij)
+          }
+        } else {
+          if encode {
+            parQry = fmt.Sprintf("&%s%%3D%s", ik, ij)
+          } else {
+            parQry = fmt.Sprintf("&%s=%s", ik, ij)
+          }
+        }
       }
     }
   }
+  return parQry
+}
 
+func Validate(req *OAuthRequest, clientsecret, tokensecret string) (bool, error) {
+  params := make(map[string][]string)
+  params["oauth_consumer_key"] = []string{req.ConsumerKey}
+  params["oauth_nonce"] = []string{req.Nonce}
+  params["oauth_signature_method"] = []string{req.SignatureMethod}
+  params["oauth_timestamp"] = []string{req.Timestamp}
+  params["oauth_token"] = []string{req.Token}
+  params["oauth_version"] = []string{req.Version}
+  params["oauth_callback"] = []string{req.Callback}
+
+  for k, v := range req.Parameters {
+    params[k] = v
+  }
+
+  parQry := PrepareQuery(params, true)
   query := fmt.Sprintf("%s&%s%s", req.Method, escape(req.URL), parQry)
 
   key := fmt.Sprintf("%s&%s", escape(clientsecret), escape(tokensecret))
@@ -154,6 +176,19 @@ func Validate(req *OAuthRequest, clientsecret, tokensecret string) (bool, error)
   signature := escape(base(sigbytes))
 
   return signature == req.Signature, nil
+}
+
+func RequestTokenPayload(reply * OAuthRequestTokenReply) string {
+  params := make(map[string][]string)
+  params["oauth_token"] = []string{reply.Token}
+  params["oauth_token_secret"] = []string{reply.TokenSecret}
+  parQry := PrepareQuery(params, false)
+  if reply.CallbackConfirmed {
+    parQry = parQry + "&oauth_callback_confirmed=true"
+  } else {
+    parQry = parQry + "&oauth_callback_confirmed=false"
+  }
+  return parQry
 }
 
 func sign(key string, str string, method string) ([]byte, error) {
